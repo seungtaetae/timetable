@@ -1,0 +1,49 @@
+# 학교 서버(Supabase) 깨우기
+# Supabase 무료 플랜은 일주일 넘게 쓰지 않으면 멈춰요(방학 때 특히).
+# 이 파일이 이틀마다 오전 7시쯤(한국 시각) 서버를 한 번씩 불러서 멈추지 않게 해요.
+# 한 달에 한 번(1일) 저장소에 작은 기록(.github/keepalive.txt)을 남겨요.
+# 깃허브는 60일 동안 아무 변화가 없는 공개 저장소의 자동 실행을 꺼 버리기 때문이에요.
+# 서버에 연결하지 못하면 이 실행이 '실패'로 표시되고, 깃허브가 메일로 알려 줘요.
+name: 학교 서버 깨우기
+
+on:
+  schedule:
+    - cron: '17 22 */2 * *'    # 이틀마다 22:17 UTC = 한국 시각 다음 날 오전 7:17
+  workflow_dispatch:            # Actions 탭에서 [Run workflow]로 바로 시험할 수 있어요
+
+permissions:
+  contents: write
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 서버 깨우기
+        env:
+          SUPABASE_URL: https://zpepsigzjbniibbrggyy.supabase.co
+          # 공개(anon) 키 — 사이트(index.html)에 이미 들어 있는, 브라우저에 넣어도 되는 키예요
+          SUPABASE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpwZXBzaWd6amJuaWliYnJnZ3l5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMDYzNTIsImV4cCI6MjEwNTY4MjM1Mn0.NP6JVq2XMaFQXoGpmRvWh_0XxT_ons4ThRa1nAw7FwU
+        run: |
+          code=$(curl -s -o /tmp/r.txt -w "%{http_code}" -X POST "$SUPABASE_URL/rest/v1/rpc/tts_keepalive" \
+            -H "apikey: $SUPABASE_KEY" -H "Authorization: Bearer $SUPABASE_KEY" -H "Content-Type: application/json" -d '{}') || true
+          echo "서버 응답: $code"
+          if [ "$code" != "200" ]; then
+            echo "서버에 연결하지 못했어요. Supabase 대시보드에서 프로젝트가 멈췄는지(Paused) 확인해 주세요."
+            exit 1
+          fi
+          echo "서버가 깨어 있어요."
+
+      - uses: actions/checkout@v4
+
+      - name: 한 달에 한 번 저장소에 기록 남기기 (60일 자동 꺼짐 막기)
+        run: |
+          if [ "$(date -u +%d)" != "01" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "오늘은 기록하지 않아요 (매달 1일만)."
+            exit 0
+          fi
+          date -u +"%Y-%m-%d %H:%M UTC" > .github/keepalive.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/keepalive.txt
+          git commit -m "서버 깨우기 기록" || echo "바뀐 것이 없어요"
+          git push
